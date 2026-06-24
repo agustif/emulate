@@ -76,6 +76,11 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
       <td>none</td>
       <td>Override the advertised base URL (used in OAuth redirects, webhook URLs, etc.). Per-service <code>baseUrl</code> in seed config takes highest priority, then this option, then the <code>EMULATE_BASE_URL</code> env var (supports <code>{'{service}'}</code> template), then <code>PORTLESS_URL</code> (supports <code>{'{service}'}</code>, automatically set by the <code>portless</code> CLI wrapper), then <code>{`http://localhost:<port>`}</code>.</td>
     </tr>
+    <tr>
+      <td><code>persistence</code></td>
+      <td>none</td>
+      <td><code>PersistenceAdapter</code> used to restore Store and token state across process restarts</td>
+    </tr>
   </tbody>
 </table>
 
@@ -99,10 +104,39 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
     </tr>
     <tr>
       <td><code>close()</code></td>
-      <td>Shut down the HTTP server, returns a Promise</td>
+      <td>Shut down the HTTP server, flush pending persistence writes, and surface persistence failures</td>
     </tr>
   </tbody>
 </table>
+
+### Persistent state
+
+Pass a persistence adapter to retain Store and authentication-token state across emulator instances. The adapter loads before seeding. A missing snapshot returns `null` and seeds normally; malformed or incompatible snapshots reject startup instead of silently resetting state. Use a separate adapter key or file for each service.
+
+```typescript
+import { createEmulator, filePersistence } from 'emulate'
+
+const github = await createEmulator({
+  service: 'github',
+  port: 4001,
+  persistence: filePersistence('.emulate/github.json'),
+})
+
+// Successful POST, PUT, PATCH, and DELETE requests enqueue serialized saves.
+// close() waits for queued saves and rejects if persistence failed.
+await github.close()
+```
+
+Custom adapters use the exported interface:
+
+```typescript
+import type { PersistenceAdapter } from 'emulate'
+
+const persistence: PersistenceAdapter = {
+  load: async () => await storage.get('github-emulator'),
+  save: async (data) => await storage.set('github-emulator', data),
+}
+```
 
 ## Scoped packages
 

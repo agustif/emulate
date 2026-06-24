@@ -151,6 +151,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
 | `port` | `4000` | Port for the HTTP server |
 | `seed` | none | Inline seed data (same shape as YAML config) |
 | `baseUrl` | none | Override advertised base URL. Per-service `baseUrl` in seed config takes highest priority, then this option, then `EMULATE_BASE_URL` env var (supports `{service}`), then `PORTLESS_URL` (supports `{service}`, automatically set by the `portless` CLI wrapper), then `http://localhost:<port>`. |
+| `persistence` | none | `PersistenceAdapter` used to restore Store and token state across process restarts |
 
 ### Instance methods
 
@@ -158,7 +159,36 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
 |--------|-------------|
 | `url` | Base URL of the running server |
 | `reset()` | Wipe the store and replay seed data |
-| `close()` | Shut down the HTTP server, returns a Promise |
+| `close()` | Shut down the HTTP server, flush pending persistence writes, and surface persistence failures |
+
+### Persistent programmatic state
+
+Pass a persistence adapter to retain Store and authentication-token state across emulator instances. The adapter loads before seeding. A missing snapshot returns `null` and seeds normally; malformed or incompatible snapshots reject startup instead of silently resetting state. Use a separate adapter key or file for each service.
+
+```typescript
+import { createEmulator, filePersistence } from 'emulate'
+
+const github = await createEmulator({
+  service: 'github',
+  port: 4001,
+  persistence: filePersistence('.emulate/github.json'),
+})
+
+// Successful POST, PUT, PATCH, and DELETE requests enqueue serialized saves.
+// close() waits for queued saves and rejects if persistence failed.
+await github.close()
+```
+
+Custom adapters implement the same small interface:
+
+```typescript
+import type { PersistenceAdapter } from 'emulate'
+
+const persistence: PersistenceAdapter = {
+  load: async () => await storage.get('github-emulator'),
+  save: async (data) => await storage.set('github-emulator', data),
+}
+```
 
 ## Configuration
 
