@@ -19,6 +19,7 @@ import { webhooksRoutes } from "./routes/webhooks.js";
 import { searchRoutes } from "./routes/search.js";
 import { actionsRoutes } from "./routes/actions.js";
 import { checksRoutes } from "./routes/checks.js";
+import { statusesRoutes } from "./routes/statuses.js";
 import { rateLimitRoutes } from "./routes/rate-limit.js";
 import { metaRoutes } from "./routes/meta.js";
 import { oauthRoutes } from "./routes/oauth.js";
@@ -489,6 +490,7 @@ export const githubPlugin: ServicePlugin = {
     searchRoutes(ctx);
     actionsRoutes(ctx);
     checksRoutes(ctx);
+    statusesRoutes(ctx);
     rateLimitRoutes(ctx);
     metaRoutes(ctx);
     oauthRoutes(ctx);

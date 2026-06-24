@@ -242,6 +242,7 @@ function deleteRepoCascade(gh: GitHubStore, repo: GitHubRepo) {
   delByRepo(gh.branchProtections);
   delByRepo(gh.refs);
   delByRepo(gh.commits);
+  delByRepo(gh.commitStatuses);
   delByRepo(gh.trees);
   delByRepo(gh.blobs);
   delByRepo(gh.tags);
