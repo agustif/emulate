@@ -515,6 +515,9 @@ JWT authentication: sign a JWT with `{ iss: "<app_id>" }` using the app's privat
 **App webhook delivery**: When events occur on repos where a GitHub App is installed, the emulator mirrors real GitHub behavior:
 - All webhook payloads (including repo and org hooks) include an `installation` field with `{ id, node_id }`.
 - If the app has a `webhook_url`, the emulator delivers the event there with the `installation` field and (if configured) an `X-Hub-Signature-256` header signed with `webhook_secret`.
+- Successful HTTP responses and transport failures are retained with a stable delivery GUID, request metadata, and response metadata.
+- App JWTs can list deliveries with `GET /app/hook/deliveries`, inspect one with `GET /app/hook/deliveries/:id`, and redeliver its retained payload with `POST /app/hook/deliveries/:id/attempts`.
+- Redelivery creates a new attempt ID while preserving the original GUID and payload. List results support `per_page`, cursor pagination, and `status=success|failure`.
 
 ### Slack OAuth Apps
 

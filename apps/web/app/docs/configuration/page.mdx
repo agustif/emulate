@@ -118,6 +118,8 @@ github:
         contents: read
         issues: write
       events: [push, pull_request]
+      webhook_url: "http://localhost:3000/webhooks/github"
+      webhook_secret: "my-secret"
       installations:
         - installation_id: 100
           account: my-org
@@ -131,11 +133,16 @@ github:
 - `GET /app/installations` - list app installations
 - `GET /app/installations/:id` - get installation
 - `POST /app/installations/:id/access_tokens` - create installation access token
+- `GET /app/hook/deliveries` - list retained delivery attempts with cursor and outcome filtering
+- `GET /app/hook/deliveries/:id` - inspect retained request and response metadata
+- `POST /app/hook/deliveries/:id/attempts` - redeliver the retained payload
 - `GET /repos/:owner/:repo/installation` - find repo installation
 - `GET /orgs/:org/installation` - find org installation
 - `GET /users/:username/installation` - find user installation
 
 JWT authentication: sign a JWT with `{ iss: "<app_id>" }` using the app's private key (RS256). The emulator verifies the signature and resolves the app.
+
+Delivery history is Store-backed and includes both HTTP responses and transport failures. Redelivery creates a new attempt ID while preserving the original delivery GUID and payload.
 
 ## Google Seed Config
 

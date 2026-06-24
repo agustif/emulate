@@ -172,11 +172,15 @@ github:
         contents: read
         issues: write
       events: [push, pull_request]
+      webhook_url: "http://localhost:3000/webhooks/github"
+      webhook_secret: "my-secret"
       installations:
         - installation_id: 100
           account: my-org
           repository_selection: all
 ```
+
+App webhook deliveries retain successful responses and transport failures in the emulator Store. Authenticate with an App JWT to list deliveries with `GET /app/hook/deliveries`, inspect request and response metadata with `GET /app/hook/deliveries/:id`, or redeliver the retained payload with `POST /app/hook/deliveries/:id/attempts`. Redelivery creates a new attempt ID while preserving the original GUID and payload. List results support `per_page`, cursor pagination, and `status=success|failure`.
 
 ## Links
 

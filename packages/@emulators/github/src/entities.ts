@@ -520,6 +520,30 @@ export interface GitHubAppInstallation extends Entity {
   suspended_at: string | null;
 }
 
+export interface GitHubAppWebhookDelivery extends Entity {
+  app_id: number;
+  guid: string;
+  event: string;
+  action: string | null;
+  installation_id: number;
+  repository_id: number | null;
+  url: string;
+  payload: unknown;
+}
+
+export interface GitHubAppWebhookAttempt extends Entity {
+  app_id: number;
+  delivery_id: number;
+  redelivery: boolean;
+  delivered_at: string;
+  duration: number;
+  status: string;
+  status_code: number | null;
+  request_headers: Record<string, string>;
+  response_headers: Record<string, string>;
+  response_payload: string | null;
+}
+
 export interface GitHubOAuthGrant extends Entity {
   user_id: number;
   oauth_app_id: number;

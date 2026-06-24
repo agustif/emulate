@@ -404,6 +404,22 @@ curl http://localhost:4001/users/octocat/installation
 
 App webhook delivery: when events occur, the emulator POSTs `event_callback` payloads to configured `webhook_url` with `X-GitHub-Event` and `X-Hub-Signature-256` headers.
 
+Delivery history retains successful responses and transport failures in the emulator Store:
+
+```bash
+# List newest attempts. Supports per_page, cursor, and status=success|failure.
+curl http://localhost:4001/app/hook/deliveries \
+  -H "Authorization: Bearer <jwt>"
+
+# Inspect retained request and response metadata.
+curl http://localhost:4001/app/hook/deliveries/1 \
+  -H "Authorization: Bearer <jwt>"
+
+# Redeliver the retained payload with the same GUID and a new attempt ID.
+curl -X POST http://localhost:4001/app/hook/deliveries/1/attempts \
+  -H "Authorization: Bearer <jwt>"
+```
+
 ### Releases
 
 ```bash
