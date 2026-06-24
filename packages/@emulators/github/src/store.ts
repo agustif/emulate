@@ -34,6 +34,8 @@ import type {
   GitHubOAuthApp,
   GitHubApp,
   GitHubAppInstallation,
+  GitHubAppWebhookDelivery,
+  GitHubAppWebhookAttempt,
   GitHubOAuthGrant,
 } from "./entities.js";
 
@@ -72,6 +74,8 @@ export interface GitHubStore {
   oauthApps: Collection<GitHubOAuthApp>;
   apps: Collection<GitHubApp>;
   appInstallations: Collection<GitHubAppInstallation>;
+  appWebhookDeliveries: Collection<GitHubAppWebhookDelivery>;
+  appWebhookAttempts: Collection<GitHubAppWebhookAttempt>;
   oauthGrants: Collection<GitHubOAuthGrant>;
 }
 
@@ -113,6 +117,14 @@ export function getGitHubStore(store: Store): GitHubStore {
     appInstallations: store.collection<GitHubAppInstallation>("github.app_installations", [
       "app_id",
       "installation_id",
+    ]),
+    appWebhookDeliveries: store.collection<GitHubAppWebhookDelivery>("github.app_webhook_deliveries", [
+      "app_id",
+      "guid",
+    ]),
+    appWebhookAttempts: store.collection<GitHubAppWebhookAttempt>("github.app_webhook_attempts", [
+      "app_id",
+      "delivery_id",
     ]),
     oauthGrants: store.collection<GitHubOAuthGrant>("github.oauth_grants", ["user_id", "client_id"]),
   };

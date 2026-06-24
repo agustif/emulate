@@ -1,10 +1,10 @@
-import { createHmac } from "crypto";
 import type { Hono } from "@emulators/core";
 import type { ServicePlugin, Store, WebhookDispatcher, TokenMap, AppEnv, RouteContext } from "@emulators/core";
 import { getGitHubStore } from "./store.js";
 import type { GitHubStore } from "./store.js";
 import type { GitHubAppInstallation } from "./entities.js";
 import { generateNodeId, generateSha } from "./helpers.js";
+import { createAppWebhookDelivery } from "./app-webhook-deliveries.js";
 import { usersRoutes } from "./routes/users.js";
 import { reposRoutes } from "./routes/repos.js";
 import { issuesRoutes } from "./routes/issues.js";
@@ -421,34 +421,14 @@ async function deliverToAppWebhookUrls(
   repoName: string | undefined,
 ): Promise<void> {
   const installations = findInstallationsForRepo(gh, ownerLogin, repoName, event);
+  const repositoryId = repoName ? (gh.repos.findOneBy("full_name", `${ownerLogin}/${repoName}`)?.id ?? null) : null;
 
   for (const inst of installations) {
     const ghApp = gh.apps.all().find((a) => a.app_id === inst.app_id);
     if (!ghApp?.webhook_url) continue;
 
     const enriched = enrichPayloadWithInstallation(payload, inst);
-    const body = JSON.stringify(enriched);
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "X-GitHub-Event": event,
-      "X-GitHub-Delivery": String(Date.now()),
-    };
-    if (ghApp.webhook_secret) {
-      const hmac = createHmac("sha256", ghApp.webhook_secret).update(body).digest("hex");
-      headers["X-Hub-Signature-256"] = `sha256=${hmac}`;
-    }
-
-    try {
-      await fetch(ghApp.webhook_url, {
-        method: "POST",
-        headers,
-        body,
-        signal: AbortSignal.timeout(10000),
-      });
-    } catch {
-      // Best-effort delivery
-    }
+    await createAppWebhookDelivery(gh, ghApp, inst, event, action, enriched, repositoryId);
   }
 }
 
