@@ -433,6 +433,38 @@ async function deliverToAppWebhookUrls(
   }
 }
 
+const pendingAppDeliveries = new WeakMap<Store, Set<Promise<void>>>();
+
+function trackAppDelivery(store: Store, task: Promise<void>): void {
+  let pending = pendingAppDeliveries.get(store);
+  if (!pending) {
+    pending = new Set();
+    pendingAppDeliveries.set(store, pending);
+  }
+  pending.add(task);
+  void task.then(
+    () => pending!.delete(task),
+    () => pending!.delete(task),
+  );
+}
+
+async function flushAppDeliveries(store: Store): Promise<void> {
+  let firstError: unknown;
+  let hasError = false;
+  while (pendingAppDeliveries.get(store)?.size) {
+    const tasks = [...pendingAppDeliveries.get(store)!];
+    const results = await Promise.allSettled(tasks);
+    if (!hasError) {
+      const rejected = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (rejected) {
+        firstError = rejected.reason;
+        hasError = true;
+      }
+    }
+  }
+  if (hasError) throw firstError;
+}
+
 export const githubPlugin: ServicePlugin = {
   name: "github",
   register(app: Hono<AppEnv>, store: Store, webhooks: WebhookDispatcher, baseUrl: string, tokenMap?: TokenMap): void {
@@ -451,8 +483,12 @@ export const githubPlugin: ServicePlugin = {
       const enrichedPayload =
         installations.length > 0 ? enrichPayloadWithInstallation(payload, installations[0]) : payload;
 
-      await originalDispatch(event, action, enrichedPayload, owner, repo);
-      await deliverToAppWebhookUrls(gh, event, action, payload, owner, repo);
+      const task = (async () => {
+        await originalDispatch(event, action, enrichedPayload, owner, repo);
+        await deliverToAppWebhookUrls(gh, event, action, payload, owner, repo);
+      })();
+      trackAppDelivery(store, task);
+      await task;
     };
 
     const ctx: RouteContext = { app, store, webhooks, baseUrl, tokenMap };
@@ -478,6 +514,9 @@ export const githubPlugin: ServicePlugin = {
   },
   seed(store: Store, baseUrl: string): void {
     seedDefaults(store, baseUrl);
+  },
+  flush(store: Store): Promise<void> {
+    return flushAppDeliveries(store);
   },
 };
 

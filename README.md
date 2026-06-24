@@ -159,7 +159,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
 |--------|-------------|
 | `url` | Base URL of the running server |
 | `reset()` | Wipe the store and replay seed data |
-| `close()` | Shut down the HTTP server, flush pending persistence writes, and surface persistence failures |
+| `close()` | Stop the HTTP server, drain service side effects, capture final state, flush persistence writes, and surface the first failure |
 
 ### Persistent programmatic state
 
@@ -175,7 +175,8 @@ const github = await createEmulator({
 })
 
 // Successful POST, PUT, PATCH, and DELETE requests enqueue serialized saves.
-// close() waits for queued saves and rejects if persistence failed.
+// close() drains service work, captures final state, waits for queued saves,
+// and rejects with the first close, drain, or persistence failure.
 await github.close()
 ```
 
