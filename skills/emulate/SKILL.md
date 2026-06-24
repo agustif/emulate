@@ -100,6 +100,7 @@ await vercel.close()
 | `port` | `4000` | Port for the HTTP server |
 | `seed` | none | Inline seed data (same shape as YAML config) |
 | `baseUrl` | none | Override advertised base URL. Per-service `baseUrl` in seed config takes highest priority, then this option, then `EMULATE_BASE_URL` env var (supports `{service}`), then `PORTLESS_URL` (supports `{service}`, automatically set by the `portless` CLI wrapper), then `http://localhost:<port>`. |
+| `persistence` | none | `PersistenceAdapter` used to restore Store and token state across process restarts |
 
 ### Instance Methods
 
@@ -107,7 +108,7 @@ await vercel.close()
 |--------|-------------|
 | `url` | Base URL of the running server |
 | `reset()` | Wipe the store and replay seed data |
-| `close()` | Shut down the HTTP server, returns a Promise |
+| `close()` | Shut down the HTTP server, flush pending persistence writes, and surface persistence failures |
 
 ## Vitest / Jest Setup
 
@@ -360,16 +361,23 @@ By default, all emulator state is in-memory. For persistence across process rest
 ### Built-in file persistence
 
 ```typescript
-import { filePersistence } from '@emulators/core'
+import { createEmulator, filePersistence } from 'emulate'
 
-// CLI or local dev: persists to a JSON file
 const adapter = filePersistence('.emulate/state.json')
+
+const github = await createEmulator({
+  service: 'github',
+  port: 4001,
+  persistence: adapter,
+})
+
+await github.close()
 ```
 
 ### Custom adapters
 
 ```typescript
-import type { PersistenceAdapter } from '@emulators/core'
+import type { PersistenceAdapter } from 'emulate'
 
 const kvAdapter: PersistenceAdapter = {
   async load() { return await kv.get('emulate-state') },
@@ -377,7 +385,7 @@ const kvAdapter: PersistenceAdapter = {
 }
 ```
 
-State is loaded on cold start and saved after every mutating request (POST, PUT, PATCH, DELETE). Saves are serialized to prevent race conditions.
+For `createEmulator`, state loads before seeding and saves after successful mutating requests. `reset()` enqueues the reset state, and `close()` waits for all queued saves. Corrupt or incompatible state fails startup instead of silently reseeding. Saves are serialized to prevent race conditions. Use a separate adapter key or file for each service.
 
 ## Architecture
 
