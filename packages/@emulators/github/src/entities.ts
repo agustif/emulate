@@ -290,6 +290,17 @@ export interface GitHubCommit extends Entity {
   user_id: number | null;
 }
 
+export interface GitHubCommitStatus extends Entity {
+  node_id: string;
+  repo_id: number;
+  sha: string;
+  state: "error" | "failure" | "pending" | "success";
+  description: string | null;
+  target_url: string | null;
+  context: string;
+  creator_id: number;
+}
+
 export interface GitHubTree extends Entity {
   repo_id: number;
   sha: string;

@@ -740,6 +740,12 @@ Every endpoint below is fully stateful. Creates, updates, and deletes persist in
 - Artifacts: list, get, delete
 - Secrets: repo + org CRUD
 
+### Commit Statuses
+- `POST /repos/:owner/:repo/statuses/:sha` - create a status and dispatch a `status` webhook
+- `GET /repos/:owner/:repo/commits/:ref/statuses` - list status history newest first
+- `GET /repos/:owner/:repo/commits/:ref/status` - get the latest status per context and combined state
+- Legacy `GET /repos/:owner/:repo/statuses/:ref` route, ref resolution, and pagination
+
 ### Checks
 - Check runs: create, update, get, annotations, rerequest, list by ref/suite
 - Check suites: create, get, preferences, rerequest, list by ref

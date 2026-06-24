@@ -459,6 +459,22 @@ curl "http://localhost:4001/search/issues?q=repo:octocat/hello-world+is:open"
 # Secrets: repo + org CRUD
 ```
 
+### Commit Statuses
+
+```bash
+# Create a commit status. state is error, failure, pending, or success.
+curl -X POST http://localhost:4001/repos/octocat/hello-world/statuses/$SHA \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"state": "success", "context": "ci/build", "description": "Build passed"}'
+
+# Read history newest first or get the latest-per-context combined state.
+curl http://localhost:4001/repos/octocat/hello-world/commits/$SHA/statuses
+curl http://localhost:4001/repos/octocat/hello-world/commits/$SHA/status
+```
+
+Status history supports `page` and `per_page`. Creating a status dispatches a repository `status` webhook.
+
 ### Checks
 
 ```bash
