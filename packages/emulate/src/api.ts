@@ -71,31 +71,39 @@ function closeServer(httpServer: ReturnType<typeof serve>): Promise<void> {
 
 async function closeWithPersistence(
   httpServer: ReturnType<typeof serve>,
+  flushPlugin: (() => Promise<void>) | undefined,
   persistence: EmulatorPersistence | undefined,
 ): Promise<void> {
-  let serverError: unknown;
-  let hasServerError = false;
+  let firstError: unknown;
+  let hasError = false;
+  const recordError = (error: unknown): void => {
+    if (hasError) return;
+    firstError = error;
+    hasError = true;
+  };
+
   try {
     await closeServer(httpServer);
   } catch (error) {
-    serverError = error;
-    hasServerError = true;
+    recordError(error);
   }
 
-  let persistenceError: unknown;
-  let hasPersistenceError = false;
   try {
-    await persistence?.flush();
+    await flushPlugin?.();
   } catch (error) {
-    persistenceError = error;
-    hasPersistenceError = true;
+    recordError(error);
   }
 
-  if (hasServerError && hasPersistenceError) {
-    throw new AggregateError([serverError, persistenceError], "Failed to close emulator and flush persisted state");
+  if (persistence) {
+    persistence.enqueueSave();
+    try {
+      await persistence.flush();
+    } catch (error) {
+      recordError(error);
+    }
   }
-  if (hasPersistenceError) throw persistenceError;
-  if (hasServerError) throw serverError;
+
+  if (hasError) throw firstError;
 }
 
 export async function createEmulator(options: EmulatorOptions): Promise<Emulator> {
@@ -169,7 +177,11 @@ export async function createEmulator(options: EmulatorOptions): Promise<Emulator
       persistence?.enqueueSave();
     },
     close() {
-      return closeWithPersistence(httpServer, persistence);
+      return closeWithPersistence(
+        httpServer,
+        loaded.plugin.flush ? () => loaded.plugin.flush!(store) : undefined,
+        persistence,
+      );
     },
   };
 }

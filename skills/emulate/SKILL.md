@@ -108,7 +108,7 @@ await vercel.close()
 |--------|-------------|
 | `url` | Base URL of the running server |
 | `reset()` | Wipe the store and replay seed data |
-| `close()` | Shut down the HTTP server, flush pending persistence writes, and surface persistence failures |
+| `close()` | Stop the HTTP server, drain service side effects, capture final state, flush persistence writes, and surface the first failure |
 
 ## Vitest / Jest Setup
 

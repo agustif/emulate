@@ -104,7 +104,7 @@ afterAll(() => Promise.all([github.close(), vercel.close()]))
     </tr>
     <tr>
       <td><code>close()</code></td>
-      <td>Shut down the HTTP server, flush pending persistence writes, and surface persistence failures</td>
+      <td>Stop the HTTP server, drain service side effects, capture final state, flush persistence writes, and surface the first failure</td>
     </tr>
   </tbody>
 </table>
@@ -123,7 +123,8 @@ const github = await createEmulator({
 })
 
 // Successful POST, PUT, PATCH, and DELETE requests enqueue serialized saves.
-// close() waits for queued saves and rejects if persistence failed.
+// close() drains service work, captures final state, waits for queued saves,
+// and rejects with the first close, drain, or persistence failure.
 await github.close()
 ```
 
