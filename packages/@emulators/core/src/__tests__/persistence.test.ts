@@ -1,9 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { existsSync, rmSync, readFileSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Collection, Store, type Entity, serializeValue, deserializeValue } from "../store.js";
 import { filePersistence } from "../persistence.js";
+
+const fsMocks = vi.hoisted(() => ({
+  readFile: vi.fn<typeof import("node:fs/promises").readFile>(),
+  rename: vi.fn<typeof import("node:fs/promises").rename>(),
+  rm: vi.fn<typeof import("node:fs/promises").rm>(),
+}));
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  fsMocks.readFile.mockImplementation(actual.readFile);
+  fsMocks.rename.mockImplementation(actual.rename);
+  fsMocks.rm.mockImplementation(actual.rm);
+  return { ...actual, readFile: fsMocks.readFile, rename: fsMocks.rename, rm: fsMocks.rm };
+});
 
 interface User extends Entity {
   login: string;
@@ -212,14 +226,17 @@ describe("Store snapshot/restore", () => {
 });
 
 describe("filePersistence", () => {
-  const tmpPath = join(tmpdir(), `emulate-test-${Date.now()}.json`);
+  let directory: string;
+  let tmpPath: string;
+
+  beforeEach(() => {
+    directory = mkdtempSync(join(tmpdir(), "emulate-persistence-"));
+    tmpPath = join(directory, "state.json");
+  });
 
   afterEach(() => {
-    try {
-      rmSync(tmpPath);
-    } catch {
-      /* noop */
-    }
+    vi.clearAllMocks();
+    rmSync(directory, { recursive: true, force: true });
   });
 
   it("save writes and load reads a JSON file", async () => {
@@ -235,16 +252,75 @@ describe("filePersistence", () => {
   });
 
   it("load returns null for nonexistent file", async () => {
-    const adapter = filePersistence(join(tmpdir(), "does-not-exist.json"));
+    const adapter = filePersistence(tmpPath);
     expect(await adapter.load()).toBeNull();
   });
 
+  it("load propagates errors other than ENOENT", async () => {
+    const permissionError = Object.assign(new Error("permission denied"), { code: "EACCES" });
+    fsMocks.readFile.mockRejectedValueOnce(permissionError);
+    const adapter = filePersistence(tmpPath);
+
+    await expect(adapter.load()).rejects.toBe(permissionError);
+  });
+
+  it("atomically replaces an existing file", async () => {
+    writeFileSync(tmpPath, "old");
+    const adapter = filePersistence(tmpPath);
+
+    await adapter.save("new");
+
+    expect(readFileSync(tmpPath, "utf-8")).toBe("new");
+    expect(fsMocks.rename).toHaveBeenCalledOnce();
+    const [temporaryPath, targetPath] = fsMocks.rename.mock.calls[0];
+    expect(temporaryPath).not.toBe(tmpPath);
+    expect(targetPath).toBe(tmpPath);
+    expect(readdirSync(directory)).toEqual(["state.json"]);
+  });
+
+  it("preserves the previous file and removes temporary state when replacement fails", async () => {
+    writeFileSync(tmpPath, "old");
+    const replacementError = Object.assign(new Error("replacement failed"), { code: "EIO" });
+    fsMocks.rename.mockRejectedValueOnce(replacementError);
+    const adapter = filePersistence(tmpPath);
+
+    await expect(adapter.save("new")).rejects.toBe(replacementError);
+
+    expect(readFileSync(tmpPath, "utf-8")).toBe("old");
+    expect(readdirSync(directory)).toEqual(["state.json"]);
+    expect(fsMocks.rm).toHaveBeenCalledOnce();
+  });
+
+  it("does not hide the replacement error when temporary cleanup also fails", async () => {
+    writeFileSync(tmpPath, "old");
+    const replacementError = new Error("replacement failed");
+    fsMocks.rename.mockRejectedValueOnce(replacementError);
+    fsMocks.rm.mockRejectedValueOnce(new Error("cleanup failed"));
+    const adapter = filePersistence(tmpPath);
+
+    await expect(adapter.save("new")).rejects.toBe(replacementError);
+    expect(readFileSync(tmpPath, "utf-8")).toBe("old");
+  });
+
+  it("uses an isolated temporary file for each concurrent save", async () => {
+    const adapter = filePersistence(tmpPath);
+
+    await Promise.all([adapter.save("first"), adapter.save("second")]);
+
+    expect(fsMocks.rename).toHaveBeenCalledTimes(2);
+    const temporaryPaths = fsMocks.rename.mock.calls.map(([temporaryPath]) => temporaryPath);
+    expect(new Set(temporaryPaths).size).toBe(2);
+    expect(
+      temporaryPaths.every((temporaryPath) => typeof temporaryPath === "string" && temporaryPath.startsWith(directory)),
+    ).toBe(true);
+    expect(["first", "second"]).toContain(readFileSync(tmpPath, "utf-8"));
+    expect(readdirSync(directory)).toEqual(["state.json"]);
+  });
+
   it("save creates parent directories", async () => {
-    const dir = join(tmpdir(), `emulate-nested-${Date.now()}`);
-    const nested = join(dir, "deep", "state.json");
+    const nested = join(directory, "deep", "state.json");
     const adapter = filePersistence(nested);
     await adapter.save("{}");
     expect(existsSync(nested)).toBe(true);
-    rmSync(dir, { recursive: true, force: true });
   });
 });
