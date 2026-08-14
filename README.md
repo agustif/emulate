@@ -48,6 +48,9 @@ npx emulate init
 # Generate config for a specific service
 npx emulate init --service vercel
 
+# Emulate a device rather than an API
+npx emulate --device cast
+
 # List available services
 npx emulate list
 ```
@@ -63,6 +66,73 @@ npx emulate list
 | `--portless` | off | Serve over HTTPS via portless (auto-registers aliases) |
 
 The port can also be set via `EMULATE_PORT` or `PORT` environment variables.
+
+## Devices
+
+A **service** is a remote API your code calls: there is one of it, it speaks
+HTTP, and every service shares one app. A **device** is a peer your code talks
+to — there can be several at once, each owning its own listener, and it need not
+speak HTTP at all.
+
+That difference is why a device cannot be a `ServicePlugin`, whose only hook is
+`register(app, …)`. Devices implement `DevicePlugin` instead.
+
+```bash
+npx emulate --device cast          # one Cast device on a free port
+npx emulate --service vercel --device cast
+```
+
+```
+  emulate v0.10.0
+
+  cast:cast-1  Living Room TV (127.0.0.1:64475)
+```
+
+### Google Cast
+
+`@emulators/cast` is a Cast device: it serves the control channel — length-
+prefixed protobuf over TLS — answering `CONNECT`, `GET_STATUS`, `LAUNCH` and the
+media commands, and then does the half that is easy to forget. Casting is
+inverted: **the device fetches the media from your sender**. On `LOAD` it really
+does request the URL it was handed, and for HLS it walks the master playlist to
+a variant and the variant to its segments.
+
+That is what makes it worth having. A test that checks what your sender
+*transmitted* checks the easy half; only a device that actually pulls will
+notice a playlist that leads nowhere, a segment URL that 404s, or a media
+server that is not listening yet when `LOAD` arrives.
+
+```ts
+import { castDevice } from "@emulators/cast";
+import { Store } from "@emulators/core";
+
+const tv = await castDevice.start({ name: "living-room", port: 0, store: new Store() });
+
+// ...point your sender at 127.0.0.1:tv.port, then:
+tv.loaded;       // what LOAD asked for: contentId, contentType, hlsSegmentFormat
+tv.fetched;      // every URL the device pulled, in order
+tv.playerState;  // IDLE | PLAYING | PAUSED | BUFFERING
+
+await tv.stop();
+```
+
+Configure devices in `emulate.config.yaml`:
+
+```yaml
+cast:
+  devices:
+    - name: living-room
+      friendlyName: Living Room TV
+      model: Chromecast
+    - name: kitchen
+      friendlyName: Kitchen Display
+```
+
+Ports default to 0 — the operating system picks — because nothing is hard-coded
+to find a device on a particular port; a sender discovers it or is told where to
+look. It needs `openssl` on `PATH` to mint the throwaway certificate its TLS
+listener presents, which is the same thing a real Cast device does (senders are
+expected not to verify it).
 
 ## HTTPS with portless
 

@@ -30,6 +30,11 @@ export {
 } from "./http.js";
 export { type ServicePlugin, type RouteContext } from "./plugin.js";
 export {
+  type DevicePlugin,
+  type DeviceInstance,
+  type DeviceStartOptions,
+} from "./device.js";
+export {
   WebhookDispatcher,
   type WebhookSubscription,
   type WebhookDelivery,

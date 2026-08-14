@@ -1,5 +1,13 @@
-import { createServer, serve, type AppKeyResolver, type Store } from "@emulators/core";
-import { SERVICE_REGISTRY, SERVICE_NAMES, type ServiceName } from "../registry.js";
+import { createServer, serve, Store, type AppKeyResolver } from "@emulators/core";
+import {
+  SERVICE_REGISTRY,
+  SERVICE_NAMES,
+  DEVICE_REGISTRY,
+  DEVICE_NAMES,
+  type ServiceName,
+  type DeviceName,
+} from "../registry.js";
+import type { DeviceInstance } from "@emulators/core";
 import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { parse as parseYaml } from "yaml";
@@ -13,9 +21,15 @@ const pkg = { version: PKG_VERSION };
 export interface StartOptions {
   port: number;
   service?: string;
+  /** Comma-separated device names, e.g. `cast`. */
+  device?: string;
   seed?: string;
   baseUrl?: string;
   portless?: boolean;
+}
+
+interface DeviceSeedConfig {
+  devices?: Array<{ name?: string; port?: number } & Record<string, unknown>>;
 }
 
 interface SeedConfig {
@@ -93,6 +107,11 @@ export async function startCommand(options: StartOptions): Promise<void> {
     services = options.service.split(",").map((s) => s.trim()) as ServiceName[];
   } else if (seedConfig) {
     services = inferServicesFromConfig(seedConfig) ?? [...SERVICE_NAMES];
+  } else if (options.device) {
+    // Asking for a device and getting fourteen API emulators as well would be
+    // a surprise, and one that fails outright when something already holds
+    // port 4000.
+    services = [];
   } else {
     services = [...SERVICE_NAMES];
   }
@@ -191,7 +210,44 @@ export async function startCommand(options: StartOptions): Promise<void> {
     httpServers.push(httpServer);
   }
 
-  printBanner(serviceUrls, tokens, configSource);
+  // Devices are started after the services, and separately: they own their own
+  // listeners, so none of the shared app, auth or base-url machinery applies.
+  const devices: DeviceName[] = options.device
+    ? (options.device.split(",").map((d) => d.trim()) as DeviceName[])
+    : DEVICE_NAMES.filter((name) => seedConfig !== null && name in seedConfig);
+
+  for (const name of devices) {
+    if (!DEVICE_REGISTRY[name]) {
+      console.error(`Unknown device: ${name}`);
+      process.exit(1);
+    }
+  }
+
+  const runningDevices: DeviceInstance[] = [];
+  const deviceUrls: Array<{ name: string; url: string }> = [];
+
+  for (const name of devices) {
+    const plugin = await DEVICE_REGISTRY[name].load();
+    const deviceConfig = seedConfig?.[name] as DeviceSeedConfig | undefined;
+    // One entry with no name still means one device: `cast: {}` should start a
+    // television rather than nothing.
+    const wanted = deviceConfig?.devices ?? [{}];
+
+    for (const [index, entry] of wanted.entries()) {
+      const instance = await plugin.start({
+        name: entry.name ?? `${name}-${index + 1}`,
+        // Zero by default: unlike a service, nothing is hard-coded to find a
+        // device on a particular port — a sender is told where to look.
+        port: entry.port ?? 0,
+        store: stores[0] ?? new Store(),
+        config: entry as never,
+      });
+      runningDevices.push(instance);
+      deviceUrls.push({ name: `${name}:${instance.name}`, url: instance.address });
+    }
+  }
+
+  printBanner([...serviceUrls, ...deviceUrls], tokens, configSource);
 
   const shutdown = () => {
     console.log(`\n${pc.dim("Shutting down...")}`);
@@ -203,6 +259,9 @@ export async function startCommand(options: StartOptions): Promise<void> {
     }
     for (const srv of httpServers) {
       srv.close();
+    }
+    for (const device of runningDevices) {
+      void device.stop();
     }
     process.exit(0);
   };

@@ -1,4 +1,11 @@
-import type { ServicePlugin, Store, AppKeyResolver, AuthFallback, WebhookDispatcher } from "@emulators/core";
+import type {
+  ServicePlugin,
+  Store,
+  AppKeyResolver,
+  AuthFallback,
+  WebhookDispatcher,
+  DevicePlugin,
+} from "@emulators/core";
 
 export interface PreparedServiceSeed {
   config: Record<string, unknown>;
@@ -662,6 +669,35 @@ export const DEFAULT_TOKENS = {
     test_token_user1: {
       login: "octocat",
       scopes: ["repo", "user"],
+    },
+  },
+};
+
+// --- devices ------------------------------------------------------------------
+//
+// A device is not a service. A service is a remote API your code calls: one of
+// it, speaking HTTP, sharing the app every other service registers routes on. A
+// device is a peer your code talks to — there can be several at once, each
+// owning its own listener, and it need not speak HTTP at all.
+//
+// They are registered separately because nothing about the service pipeline
+// applies: no shared Hono app, no auth middleware, no base URL.
+
+const DEVICE_NAME_LIST = ["cast"] as const;
+export type DeviceName = (typeof DEVICE_NAME_LIST)[number];
+export const DEVICE_NAMES: readonly DeviceName[] = DEVICE_NAME_LIST;
+
+export interface DeviceEntry {
+  label: string;
+  load(): Promise<DevicePlugin<never>>;
+}
+
+export const DEVICE_REGISTRY: Record<DeviceName, DeviceEntry> = {
+  cast: {
+    label: "Google Cast device — TLS control channel, pulls media over HTTP",
+    async load() {
+      const mod = await import("@emulators/cast");
+      return mod.castDevice as unknown as DevicePlugin<never>;
     },
   },
 };
